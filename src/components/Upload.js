@@ -45,9 +45,6 @@ const Upload = () => {
       if (uploadType === "direct") {
         const uploadResponse = await fetch(signedUrl, {
           method: "PUT",
-          headers: {
-            "x-amz-acl": "public-read"
-          },
           body: file
         })
         console.log("Upload Direct Response SIgned Url = > ", uploadResponse)
@@ -75,12 +72,9 @@ const Upload = () => {
         const end = Math.min((part + 1) * partSize, file.size)
         console.log("End = >", end)
         const chunk = file.slice(start, end)
-        console.log("Chunk = >", chunk``)
+        console.log("Chunk = >", chunk)
         const uploadResponse = await fetch(signedUrl, {
           method: "PUT",
-          headers: {
-            "x-amz-acl": "public-read"
-          },
           body: chunk
         })
         console.log(`Upload Response - part ${i + 1} => `, uploadResponse)
