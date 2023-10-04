@@ -2,7 +2,8 @@
 
 import React, { useState } from "react"
 import { getSignedUrls, completeMultipartUpload } from "../api"
-
+const MAX_RETRIES = 3 // Max number of retries
+const RETRY_DELAY = 5000 // Delay (in milliseconds) between retries
 const Upload = () => {
   const [file, setFile] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -12,6 +13,8 @@ const Upload = () => {
     setFile(e.target.files[0])
   }
 
+  const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
   const uploadFile = async () => {
     if (!file) return
     console.log("File = > ", file)
@@ -19,12 +22,12 @@ const Upload = () => {
     setError(null)
 
     try {
-      const partSize = 5 * 1024 * 1024 // Adjust based on your requirements
-      const type = "avatar" // or "avatar"
+      const partSize = 500 * 1024 * 1024 // Adjust based on your requirements
+      const type = "chat" // or "avatar"
       const fileName = file.name
       const fileSize = file.size
-      const channelGroupName = null // Adjust as necessary
-      const channelName = null // Adjust as necessary
+      const channelGroupName = "Group" // Adjust as necessary
+      const channelName = "Channel" // Adjust as necessary
 
       const {
         data: { uploadType, uploadId, signedUrls, signedUrl, key }
@@ -66,8 +69,8 @@ const Upload = () => {
 
       for (let i = 0; i < signedUrls.length; i++) {
         const { part, url: signedUrl } = signedUrls[i]
-
-        const start = part * partSize
+        console.log("inside for loop part and url = > ", { part, signedUrl })
+        const start = (part - 1) * partSize
         console.log("Start = >", start)
         const end = Math.min((part + 1) * partSize, file.size)
         console.log("End = >", end)
@@ -81,7 +84,11 @@ const Upload = () => {
         if (!uploadResponse.ok) {
           throw new Error("Failed to upload part")
         }
-
+        console.log("upload Response headers = > ", uploadResponse.headers)
+        console.log(
+          "upload Response headers Etag= > ",
+          uploadResponse.headers.get("ETag")
+        )
         uploadedParts.push({
           ETag: uploadResponse.headers.get("ETag"),
           PartNumber: part
@@ -89,6 +96,32 @@ const Upload = () => {
       }
       console.log("UploadedParts =>", uploadedParts)
       const uploadData = { parts: uploadedParts, uploadId, fileName, key }
+      console.log("Uploaded Data =>", uploadData)
+      let retries = 0
+      while (retries < MAX_RETRIES) {
+        try {
+          console.log(
+            `Attempting to complete multipart upload. Try ${retries + 1}`
+          )
+          const completeResponse = await completeMultipartUpload(uploadData)
+          console.log("Upload complete:", completeResponse)
+          break // Exit the loop if upload is successful
+        } catch (err) {
+          console.error(
+            `Complete multipart upload failed on try ${retries + 1}:`,
+            err
+          )
+          retries++
+
+          if (retries < MAX_RETRIES) {
+            console.log(`Retrying in ${RETRY_DELAY}ms...`)
+            await delay(RETRY_DELAY)
+          } else {
+            console.error("Max retries reached. Upload failed:", err)
+            setError(err.message)
+          }
+        }
+      }
       const completeResponse = await completeMultipartUpload(uploadData)
 
       console.log("Upload complete:", completeResponse)
